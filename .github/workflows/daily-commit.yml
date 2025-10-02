@@ -109,16 +109,3 @@ jobs:
             url = f'https://api.telegram.org/bot{token}/sendMessage'
             message = f'''❌ <b>Git Auto-Commit Ошибка!</b>
 
-        🚨 <b>Статус:</b> Workflow завершился с ошибкой
-        📅 <b>Время:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        🚀 <b>Репозиторий:</b> ${{ github.repository }}
-        🔗 <b>Actions:</b> https://github.com/${{ github.repository }}/actions
-
-        <i>Проверьте логи для диагностики</i>'''
-                    
-                    requests.post(url, json={
-                        'chat_id': chat_id,
-                        'text': message,
-                        'parse_mode': 'HTML'
-                    })
-                "
