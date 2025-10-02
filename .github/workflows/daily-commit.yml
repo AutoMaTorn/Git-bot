@@ -1,14 +1,9 @@
-name: Daily Auto Commit with Telegram
+name: Daily Auto Commit
 
 on:
   schedule:
-    - cron: '0 12 * * *'  # Каждый день в 12:00 UTC
+    - cron: '0 12 * * *'
   workflow_dispatch:
-    inputs:
-      custom_message:
-        description: 'Custom commit message'
-        required: false
-        default: '🤖 Automated commit'
 
 jobs:
   auto-commit:
@@ -33,79 +28,24 @@ jobs:
         pip install requests
     
     - name: Run commit bot
-      id: commit_bot
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
       run: |
         python .github/scripts/commit_bot.py
-        echo "COMMIT_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
     
     - name: Commit and push changes
-      env:
-        COMMIT_MESSAGE: ${{ github.event.inputs.custom_message }}
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         
         git add .
         
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$COMMIT_MESSAGE" ]; then
-          MSG="$COMMIT_MESSAGE"
-        else
-          MSG="🤖 Auto-commit: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-        fi
-        
         # Коммитим только если есть изменения
-        git diff --staged --quiet || git commit -m "$MSG"
-        git push
+        if git diff --staged --quiet; then
+          echo "✅ No changes to commit"
+        else
+          git commit -m "🤖 Auto-commit: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          git push
+          echo "✅ Changes committed and pushed"
+        fi
     
-    - name: Send success notification
-      if: success()
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      run: |
-        python -c "
-        import os, requests
-        from datetime import datetime
-        
-        token = os.getenv('TELEGRAM_BOT_TOKEN')
-        chat_id = os.getenv('TELEGRAM_CHAT_ID')
-        
-        if token and chat_id:
-            url = f'https://api.telegram.org/bot{token}/sendMessage'
-            message = f'''✅ <b>Git Auto-Commit Успешно!</b>
-
-        🎯 <b>Статус:</b> Workflow выполнен
-        📅 <b>Время:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        🚀 <b>Репозиторий:</b> ${{ github.repository }}
-        🔗 <b>Actions:</b> https://github.com/${{ github.repository }}/actions
-
-        <i>Коммит автоматически создан и отправлен</i>'''
-                    
-                    requests.post(url, json={
-                        'chat_id': chat_id,
-                        'text': message,
-                        'parse_mode': 'HTML'
-                    })
-                "
-            
-            - name: Send failure notification
-            if: failure()
-            env:
-                TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-                TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-            run: |
-        python -c "
-        import os, requests
-        from datetime import datetime
-        
-        token = os.getenv('TELEGRAM_BOT_TOKEN')
-        chat_id = os.getenv('TELEGRAM_CHAT_ID')
-        
-        if token and chat_id:
-            url = f'https://api.telegram.org/bot{token}/sendMessage'
-            message = f'''❌ <b>Git Auto-Commit Ошибка!</b>
-
+    - name: Simple success message
+      run: echo "🎉 Workflow completed successfully!"
