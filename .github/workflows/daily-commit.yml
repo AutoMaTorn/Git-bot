@@ -1,12 +1,16 @@
-name: Daily Auto Commit with Telegram
+name: Multiple Daily Commits
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Запускать каждый день в 08:00 UTC (11:00 МСК)
+    # Запуски в разное время дня (МСК время)
+    - cron: '0 5 * * *'  # 08:00 МСК - утренние коммиты
+    - cron: '0 8 * * *'  # 11:00 МСК - дневные коммиты  
+    - cron: '0 11 * * *' # 14:00 МСК - послеобеденные
+    - cron: '0 14 * * *' # 17:00 МСК - вечерние
   workflow_dispatch:
 
 jobs:
-  auto-commit:
+  commit-session:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,37 +22,31 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
     
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Install dependencies
+    - name: Generate 3-4 commits
       run: |
-        pip install requests
-    
-    - name: Run commit bot
-      id: commit_bot
-      run: |
-        python .github/scripts/commit_bot.py
-        echo "commit_time=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
-    
-    - name: Commit and push changes
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
+        # Случайное количество коммитов от 3 до 4
+        COMMIT_COUNT=$((3 + RANDOM % 2))
         
-        git add .
+        for i in $(seq 1 $COMMIT_COUNT); do
+          echo "Создание коммита $i из $COMMIT_COUNT..."
+          
+          # Создаем разные файлы для разнообразия
+          FILES=("activities.json" "progress.log" "updates.md" "stats.txt")
+          FILE=${FILES[$RANDOM % ${#FILES[@]}]}
+          
+          # Добавляем запись в файл
+          echo "Update $(date -u +'%Y-%m-%d %H:%M:%S') - Commit $i" >> $FILE
+          
+          git config --local user.email "github-actions[bot]@users.noreply.github.com" 
+          git config --local user.name "github-actions[bot]"
+          
+          git add $FILE
+          git commit -m "📝 $(date -u +'%H:%M') - Update $FILE" --allow-empty
+          
+          sleep 1
+        done
         
-        if git diff --staged --quiet; then
-          echo "✅ No changes to commit"
-          echo "has_changes=false" >> $GITHUB_ENV
-        else
-          git commit -m "🤖 Auto-commit: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          git push
-          echo "✅ Changes committed and pushed"
-          echo "has_changes=true" >> $GITHUB_ENV
-        fi
+        git push
     
     - name: Send Telegram success notification
       if: success() && env.has_changes == 'true'
