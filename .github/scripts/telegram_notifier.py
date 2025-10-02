@@ -1,0 +1,6 @@
+# 8380865454:AAFXpdj8kPbWGBcXFgRoRXJGJO_o57Wx1Y8
+
+# https://api.telegram.org/bot8380865454:AAFXpdj8kPbWGBcXFgRoRXJGJO_o57Wx1Y8/getUpdates
+
+
+# 467428380
