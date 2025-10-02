@@ -2,7 +2,7 @@ name: Daily Auto Commit with Telegram
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Каждые 5 минут для теста
+    - cron: '0 8 * * *'  # Запускать каждый день в 08:00 UTC (11:00 МСК)
   workflow_dispatch:
 
 jobs:
