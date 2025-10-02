@@ -1,0 +1,12 @@
+# Основные зависимости для GitHub Actions + Telegram
+requests==2.31.0
+
+# Дополнительные для локального запуска
+schedule==1.2.0
+python-telegram-bot==20.7
+
+# Для работы с датами (обычно встроено)
+# python-dateutil==2.8.2
+
+# Для работы с JSON (встроено в Python)
+# Для работы с OS (встроено в Python)
