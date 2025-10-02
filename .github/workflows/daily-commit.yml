@@ -1,4 +1,4 @@
-name: Daily Auto Commit
+name: Daily Auto Commit with Telegram
 
 on:
   schedule:
@@ -28,8 +28,10 @@ jobs:
         pip install requests
     
     - name: Run commit bot
+      id: commit_bot
       run: |
         python .github/scripts/commit_bot.py
+        echo "commit_time=$(date -u +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
     
     - name: Commit and push changes
       run: |
@@ -38,14 +40,94 @@ jobs:
         
         git add .
         
-        # Коммитим только если есть изменения
         if git diff --staged --quiet; then
           echo "✅ No changes to commit"
+          echo "has_changes=false" >> $GITHUB_ENV
         else
           git commit -m "🤖 Auto-commit: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
           git push
           echo "✅ Changes committed and pushed"
+          echo "has_changes=true" >> $GITHUB_ENV
         fi
     
-    - name: Simple success message
-      run: echo "🎉 Workflow completed successfully!"
+    - name: Send Telegram success notification
+      if: success() && env.has_changes == 'true'
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        MESSAGE="✅ <b>GitHub Actions - Успешно!</b>%0A%0A"
+        MESSAGE+="🎯 <b>Репозиторий:</b> <code>${{ github.repository }}</code>%0A"
+        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
+        MESSAGE+="🚀 <b>Статус:</b> Новый коммит создан и запушен%0A"
+        MESSAGE+="👤 <b>Запущено:</b> ${{ github.actor }}%0A%0A"
+        MESSAGE+="<i>Ежедневный авто-коммит выполнен</i>"
+        
+        curl -s -X POST \
+          "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TELEGRAM_CHAT_ID}" \
+          -d text="${MESSAGE}" \
+          -d parse_mode="HTML"
+        
+        echo "📱 Telegram notification sent"
+    
+    - name: Send Telegram no changes notification
+      if: success() && env.has_changes == 'false'
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        MESSAGE="ℹ️ <b>GitHub Actions - Без изменений</b>%0A%0A"
+        MESSAGE+="🎯 <b>Репозиторий:</b> <code>${{ github.repository }}</code>%0A"
+        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
+        MESSAGE+="💡 <b>Статус:</b> Нет изменений для коммита%0A%0A"
+        MESSAGE+="<i>Файлы уже актуальны</i>"
+        
+        curl -s -X POST \
+          "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TELEGRAM_CHAT_ID}" \
+          -d text="${MESSAGE}" \
+          -d parse_mode="HTML"
+        
+        echo "📱 Telegram no-changes notification sent"
+    
+    - name: Send Telegram failure notification
+      if: failure()
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        MESSAGE="❌ <b>GitHub Actions - Ошибка!</b>%0A%0A"
+        MESSAGE+="🎯 <b>Репозиторий:</b> <code>${{ github.repository }}</code>%0A"
+        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
+        MESSAGE+="🚨 <b>Статус:</b> Workflow завершился с ошибкой%0A"
+        MESSAGE+="🔗 <b>Логи:</b> https://github.com/${{ github.repository }}/actions%0A%0A"
+        MESSAGE+="<i>Проверьте логи workflow для диагностики</i>"
+        
+        curl -s -X POST \
+          "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TELEGRAM_CHAT_ID}" \
+          -d text="${MESSAGE}" \
+          -d parse_mode="HTML"
+        
+        echo "📱 Telegram failure notification sent"
+
+    - name: Send detailed Telegram notification
+      if: success() && env.has_changes == 'true'
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: |
+        MESSAGE="🚀 <b>Git Auto-Commit Успешно!</b>%0A%0A"
+        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
+        MESSAGE+="🔢 <b>Всего коммитов:</b> ${{ steps.commit_bot.outputs.total_commits }}%0A"
+        MESSAGE+="📊 <b>За неделю:</b> ${{ steps.commit_bot.outputs.weekly_commits }}%0A"
+        MESSAGE+="💼 <b>Активность:</b> ${{ steps.commit_bot.outputs.activity }}%0A"
+        MESSAGE+="👤 <b>Запущено:</b> ${{ github.actor }}%0A%0A"
+        MESSAGE+="<i>Репозиторий: ${{ github.repository }}</i>"
+        
+        curl -s -X POST \
+          "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d chat_id="${TELEGRAM_CHAT_ID}" \
+          -d text="${MESSAGE}" \
+          -d parse_mode="HTML"
