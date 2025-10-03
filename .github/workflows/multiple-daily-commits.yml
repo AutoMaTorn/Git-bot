@@ -1,8 +1,8 @@
-name: Multiple Daily Commits
+name: Multiple Daily Commits with Telegram
 
 on:
   schedule:
-    # Запуски в разное время дня (МСК время)
+    # 4 запуска в день в разное время (UTC время)
     - cron: '0 5 * * *'  # 08:00 МСК - утренние коммиты
     - cron: '0 8 * * *'  # 11:00 МСК - дневные коммиты  
     - cron: '0 11 * * *' # 14:00 МСК - послеобеденные
@@ -22,44 +22,102 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
     
-    - name: Generate 3-4 commits
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Generate multiple commits
+      id: generate_commits
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
-        # Случайное количество коммитов от 3 до 4
-        COMMIT_COUNT=$((3 + RANDOM % 2))
+        # Определяем сессию по времени UTC
+        CURRENT_HOUR=$(date -u +%H)
+        case $CURRENT_HOUR in
+          "05") SESSION="🌅 Утренняя сессия (08:00 МСК)" ;;
+          "08") SESSION="☀️ Дневная сессия (11:00 МСК)" ;;
+          "11") SESSION="🌇 Послеобеденная сессия (14:00 МСК)" ;;
+          "14") SESSION="🌙 Вечерняя сессия (17:00 МСК)" ;;
+          *) SESSION="⚡ Специальная сессия" ;;
+        esac
+        
+        # Случайное количество коммитов от 2 до 4
+        COMMIT_COUNT=$((2 + RANDOM % 3))
+        echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+        echo "session_name=$SESSION" >> $GITHUB_OUTPUT
+        
+        echo "Начинаем $SESSION"
+        echo "Создаем $COMMIT_COUNT коммитов..."
+        
+        # Массив файлов для разнообразия
+        FILES=("src/main.py" "docs/README.md" "config/settings.json" "tests/test_api.py" "package.json")
         
         for i in $(seq 1 $COMMIT_COUNT); do
-          echo "Создание коммита $i из $COMMIT_COUNT..."
+          echo "🔄 Создание коммита $i из $COMMIT_COUNT..."
           
-          # Создаем разные файлы для разнообразия
-          FILES=("activities.json" "progress.log" "updates.md" "stats.txt")
-          FILE=${FILES[$RANDOM % ${#FILES[@]}]}
+          # Выбираем случайный файл
+          FILE_INDEX=$((RANDOM % ${#FILES[@]}))
+          FILE=${FILES[$FILE_INDEX]}
           
-          # Добавляем запись в файл
-          echo "Update $(date -u +'%Y-%m-%d %H:%M:%S') - Commit $i" >> $FILE
+          # Создаем директорию если нужно
+          mkdir -p $(dirname "$FILE")
           
+          # Добавляем запись в файл с временем
+          echo "# Update $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $FILE
+          echo "# Commit $i/$COMMIT_COUNT in $SESSION" >> $FILE
+          echo "last_updated: $(date +%s)" >> $FILE
+          echo "" >> $FILE
+          
+          # Настройка git
           git config --local user.email "github-actions[bot]@users.noreply.github.com" 
           git config --local user.name "github-actions[bot]"
           
+          # Коммитим
           git add $FILE
-          git commit -m "📝 $(date -u +'%H:%M') - Update $FILE" --allow-empty
+          git commit -m "📝 $SESSION - Коммит $i/$COMMIT_COUNT"
           
-          sleep 1
+          echo "✅ Коммит $i создан (файл: $FILE)"
+          
+          # Небольшая пауза между коммитами (1-5 секунд)
+          sleep $((1 + RANDOM % 5))
         done
         
+        # Пушим все коммиты
         git push
+        echo "✅ Все $COMMIT_COUNT коммитов запушены"
     
-    - name: Send Telegram success notification
-      if: success() && env.has_changes == 'true'
+    - name: Send Telegram session notification
+      if: success()
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
-        MESSAGE="✅ <b>GitHub Actions - Успешно!</b>%0A%0A"
-        MESSAGE+="🎯 <b>Репозиторий:</b> <code>${{ github.repository }}</code>%0A"
-        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
-        MESSAGE+="🚀 <b>Статус:</b> Новый коммит создан и запушен%0A"
+        # Определяем эмодзи для сессии
+        CURRENT_HOUR=$(date -u +%H)
+        case $CURRENT_HOUR in
+          "05") EMOJI="🌅" ;;
+          "08") EMOJI="☀️" ;;
+          "11") EMOJI="🌇" ;;
+          "14") EMOJI="🌙" ;;
+          *) EMOJI="⚡" ;;
+        esac
+        
+        MESSAGE="$EMOJI <b>${{ steps.generate_commits.outputs.session_name }}</b>%0A%0A"
+        MESSAGE+="📊 <b>Создано коммитов:</b> ${{ steps.generate_commits.outputs.commit_count }}%0A"
+        MESSAGE+="🕒 <b>Время запуска:</b> $(date +'%H:%M МСК')%0A"
+        MESSAGE+="📅 <b>Дата:</b> $(date +'%d.%m.%Y')%0A"
         MESSAGE+="👤 <b>Запущено:</b> ${{ github.actor }}%0A%0A"
-        MESSAGE+="<i>Ежедневный авто-коммит выполнен</i>"
+        
+        # Разные сообщения для разных сессий
+        case $CURRENT_HOUR in
+          "05") MESSAGE+="<i>Отличное начало дня! Утренние коммиты завершены.</i>" ;;
+          "08") MESSAGE+="<i>Рабочий день в разгаре! Дневные обновления готовы.</i>" ;;
+          "11") MESSAGE+="<i>Послеобеденная продуктивность! Код обновлен.</i>" ;;
+          "14") MESSAGE+="<i>Завершение рабочего дня. Вечерние коммиты выполнены.</i>" ;;
+          *) MESSAGE+="<i>Специальный запуск коммитов выполнен.</i>" ;;
+        esac
         
         curl -s -X POST \
           "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -67,19 +125,24 @@ jobs:
           -d text="${MESSAGE}" \
           -d parse_mode="HTML"
         
-        echo "📱 Telegram notification sent"
+        echo "📱 Telegram уведомление отправлено для ${{ steps.generate_commits.outputs.session_name }}"
     
-    - name: Send Telegram no changes notification
-      if: success() && env.has_changes == 'false'
+    - name: Send daily summary at evening
+      if: success() && github.event.schedule == '0 14 * * *'
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
-        MESSAGE="ℹ️ <b>GitHub Actions - Без изменений</b>%0A%0A"
-        MESSAGE+="🎯 <b>Репозиторий:</b> <code>${{ github.repository }}</code>%0A"
-        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
-        MESSAGE+="💡 <b>Статус:</b> Нет изменений для коммита%0A%0A"
-        MESSAGE+="<i>Файлы уже актуальны</i>"
+        # Только для вечернего запуска - отправляем итоги дня
+        MESSAGE="📊 <b>Итоги дня по коммитам</b>%0A%0A"
+        MESSAGE+="🎯 <b>Всего сессий сегодня:</b> 4%0A"
+        MESSAGE+="🔢 <b>Примерно коммитов:</b> 8-16%0A"
+        MESSAGE+="📅 <b>Дата:</b> $(date +'%d.%m.%Y')%0A"
+        MESSAGE+="🌅 <b>Утренняя сессия:</b> 08:00 МСК ✓%0A"
+        MESSAGE+="☀️ <b>Дневная сессия:</b> 11:00 МСК ✓%0A"
+        MESSAGE+="🌇 <b>Послеобеденная сессия:</b> 14:00 МСК ✓%0A"
+        MESSAGE+="🌙 <b>Вечерняя сессия:</b> 17:00 МСК ✓%0A%0A"
+        MESSAGE+="<i>Рабочий день завершен! Статистика GitHub обновлена.</i>"
         
         curl -s -X POST \
           "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -87,42 +150,28 @@ jobs:
           -d text="${MESSAGE}" \
           -d parse_mode="HTML"
         
-        echo "📱 Telegram no-changes notification sent"
+        echo "📊 Итоговое уведомление за день отправлено"
     
-    - name: Send Telegram failure notification
+    - name: Send failure notification
       if: failure()
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
-        MESSAGE="❌ <b>GitHub Actions - Ошибка!</b>%0A%0A"
-        MESSAGE+="🎯 <b>Репозиторий:</b> <code>${{ github.repository }}</code>%0A"
-        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
-        MESSAGE+="🚨 <b>Статус:</b> Workflow завершился с ошибкой%0A"
+        CURRENT_HOUR=$(date -u +%H)
+        case $CURRENT_HOUR in
+          "05") SESSION="утренней" ;;
+          "08") SESSION="дневной" ;;
+          "11") SESSION="послеобеденной" ;;
+          "14") SESSION="вечерней" ;;
+          *) SESSION="специальной" ;;
+        esac
+        
+        MESSAGE="❌ <b>Ошибка в $SESSION сессии коммитов</b>%0A%0A"
+        MESSAGE+="🕒 <b>Время:</b> $(date +'%H:%M МСК')%0A"
+        MESSAGE+="📅 <b>Дата:</b> $(date +'%d.%m.%Y')%0A"
         MESSAGE+="🔗 <b>Логи:</b> https://github.com/${{ github.repository }}/actions%0A%0A"
-        MESSAGE+="<i>Проверьте логи workflow для диагностики</i>"
-        
-        curl -s -X POST \
-          "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-          -d chat_id="${TELEGRAM_CHAT_ID}" \
-          -d text="${MESSAGE}" \
-          -d parse_mode="HTML"
-        
-        echo "📱 Telegram failure notification sent"
-
-    - name: Send detailed Telegram notification
-      if: success() && env.has_changes == 'true'
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      run: |
-        MESSAGE="🚀 <b>Git Auto-Commit Успешно!</b>%0A%0A"
-        MESSAGE+="📅 <b>Время:</b> $(date -u +'%Y-%m-%d %H:%M:%S UTC')%0A"
-        MESSAGE+="🔢 <b>Всего коммитов:</b> ${{ steps.commit_bot.outputs.total_commits }}%0A"
-        MESSAGE+="📊 <b>За неделю:</b> ${{ steps.commit_bot.outputs.weekly_commits }}%0A"
-        MESSAGE+="💼 <b>Активность:</b> ${{ steps.commit_bot.outputs.activity }}%0A"
-        MESSAGE+="👤 <b>Запущено:</b> ${{ github.actor }}%0A%0A"
-        MESSAGE+="<i>Репозиторий: ${{ github.repository }}</i>"
+        MESSAGE+="<i>Проверьте логи workflow для диагностики проблемы</i>"
         
         curl -s -X POST \
           "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
