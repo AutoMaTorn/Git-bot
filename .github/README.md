@@ -37,7 +37,7 @@ cd git-auto-committer
 
 
 ```bash
-[python get_chat_id.py](https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates)
+https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
 ```
 
 ### 3. Настройка секретов в GitHub
@@ -213,4 +213,5 @@ MIT License - используйте на свой страх и риск!
 ## ⚠️ Отказ от ответственности
 
 Данный проект создан в образовательных целях. Использование ботов для искусственного накручивания статистики может нарушать правила некоторых платформ. Используйте responsibly!
+
 
